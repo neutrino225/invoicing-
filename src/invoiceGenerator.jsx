@@ -32,6 +32,7 @@ const PLACEHOLDER_DATA = {
 		{
 			sku: "ISLAMABAD TEA LEAF BLEND 430 GM",
 			ctSize: "24",
+			barcode: "1234567890123",
 			ctn: 5,
 			pcs: 0,
 			rp: 851,
@@ -48,6 +49,7 @@ const PLACEHOLDER_DATA = {
 		{
 			sku: "REFINED PINK SALT 800 GM",
 			ctSize: "24",
+			barcode: "2345678901234",
 			ctn: 0,
 			pcs: 1,
 			rp: 55,
@@ -64,6 +66,7 @@ const PLACEHOLDER_DATA = {
 		{
 			sku: "PREMIUM GREEN TEA 250 GM",
 			ctSize: "12",
+			barcode: "3456789012345",
 			ctn: 3,
 			pcs: 0,
 			rp: 450,
@@ -272,9 +275,12 @@ const InvoiceTemplateCreator = () => {
 			"netValue",
 		],
 		showCtSize: true,
+		showBarcode: false,
 		summaryLayout: "split", // 'split' or 'full'
 		fontSize: 9,
 		showTableBorders: false,
+		columnLabels: {},
+		aggregations: [],
 	});
 
 	const [expandedSections, setExpandedSections] = useState({
@@ -344,6 +350,117 @@ const InvoiceTemplateCreator = () => {
 
 	const toggleSection = (section) => {
 		setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+	};
+
+	// Helper function to get column label (handles regular fields and aggregations)
+	const getColumnLabel = (fieldId) => {
+		// Check if it's an aggregation
+		const aggregation = template.aggregations.find((agg) => agg.id === fieldId);
+		if (aggregation) {
+			return aggregation.label;
+		}
+		// Check for custom label
+		if (template.columnLabels[fieldId]) {
+			return template.columnLabels[fieldId];
+		}
+		// Return default label
+		const field = AVAILABLE_FIELDS.lineItems.find((f) => f.id === fieldId);
+		return field ? field.label : fieldId;
+	};
+
+	// Helper function to get aggregation for a column
+	const getAggregationForColumn = (fieldId) => {
+		return template.aggregations.find((agg) => agg.id === fieldId);
+	};
+
+	// Calculate aggregated value for a row
+	const calculateAggregatedValue = (item, aggregation) => {
+		if (!aggregation || !aggregation.fields) return 0;
+		return aggregation.fields.reduce((sum, fieldId) => {
+			const value = item[fieldId];
+			return sum + (typeof value === "number" ? value : 0);
+		}, 0);
+	};
+
+	// Add aggregation
+	const addAggregation = (fields, label, type) => {
+		const id = `agg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		const newAggregation = {
+			id,
+			label,
+			fields,
+			type,
+		};
+
+		setTemplate((prev) => {
+			const updatedAggregations = [...prev.aggregations, newAggregation];
+			let updatedLineItems = [...prev.lineItems];
+
+			if (type === "replace") {
+				// Remove source field IDs from lineItems
+				updatedLineItems = updatedLineItems.filter((f) => !fields.includes(f));
+				// Add aggregation ID
+				updatedLineItems.push(id);
+			} else {
+				// Add aggregation ID
+				updatedLineItems.push(id);
+			}
+
+			return {
+				...prev,
+				aggregations: updatedAggregations,
+				lineItems: updatedLineItems,
+			};
+		});
+	};
+
+	// Remove aggregation
+	const removeAggregation = (aggregationId) => {
+		setTemplate((prev) => {
+			const updatedAggregations = prev.aggregations.filter(
+				(agg) => agg.id !== aggregationId
+			);
+			const updatedLineItems = prev.lineItems.filter(
+				(f) => f !== aggregationId
+			);
+			return {
+				...prev,
+				aggregations: updatedAggregations,
+				lineItems: updatedLineItems,
+			};
+		});
+	};
+
+	// State for inline editing
+	const [editingField, setEditingField] = useState(null);
+	const [editingValue, setEditingValue] = useState("");
+
+	// State for aggregation modal
+	const [showAggregationModal, setShowAggregationModal] = useState(false);
+	const [aggregationFields, setAggregationFields] = useState([]);
+	const [aggregationLabel, setAggregationLabel] = useState("");
+	const [aggregationType, setAggregationType] = useState("add");
+	const [selectedFieldForAggregation, setSelectedFieldForAggregation] =
+		useState(null);
+
+	// Check if a field is replaced by an aggregation
+	const isFieldReplacedByAggregation = (fieldId) => {
+		return template.aggregations.some(
+			(agg) => agg.type === "replace" && agg.fields.includes(fieldId)
+		);
+	};
+
+	// Get all visible fields (including aggregations)
+	const getVisibleLineItemsFields = () => {
+		const regularFields = AVAILABLE_FIELDS.lineItems.filter(
+			(field) => !isFieldReplacedByAggregation(field.id)
+		);
+		const aggregationFields = template.aggregations.map((agg) => ({
+			id: agg.id,
+			label: agg.label,
+			type: "aggregation",
+		}));
+		return [...regularFields, ...aggregationFields];
 	};
 
 	// Calculate optimal column widths based on available space (with iterative refinement)
@@ -728,29 +845,265 @@ const InvoiceTemplateCreator = () => {
 										</span>
 									</label>
 								</div>
-								{AVAILABLE_FIELDS.lineItems.map((field) => {
-									const isActive = template.lineItems.includes(field.id);
-									const index = template.lineItems.indexOf(field.id);
+								<div className="option-box">
+									<label className="option-label">
+										<input
+											type="checkbox"
+											checked={template.showBarcode}
+											onChange={(e) =>
+												setTemplate((prev) => ({
+													...prev,
+													showBarcode: e.target.checked,
+												}))
+											}
+											className="field-checkbox"
+										/>
+										<span className="option-text">
+											Show Barcode under SKU name
+										</span>
+									</label>
+								</div>
+								{AVAILABLE_FIELDS.lineItems
+									.filter((field) => !isFieldReplacedByAggregation(field.id))
+									.map((field) => {
+										const isActive = template.lineItems.includes(field.id);
+										const index = template.lineItems.indexOf(field.id);
+										const isNumberField = field.type === "number";
+										const label = getColumnLabel(field.id);
+										const isEditing = editingField === field.id;
+
+										return (
+											<div
+												key={field.id}
+												className={`field-item ${
+													isActive ? "field-item-active" : "field-item-inactive"
+												}`}>
+												<input
+													type="checkbox"
+													checked={isActive}
+													onChange={() =>
+														toggleField("lineItems", null, field.id)
+													}
+													className="field-checkbox"
+												/>
+												{isEditing ? (
+													<input
+														type="text"
+														value={editingValue}
+														onChange={(e) => setEditingValue(e.target.value)}
+														onBlur={() => {
+															setTemplate((prev) => ({
+																...prev,
+																columnLabels: {
+																	...prev.columnLabels,
+																	[field.id]:
+																		editingValue.trim() || field.label,
+																},
+															}));
+															setEditingField(null);
+															setEditingValue("");
+														}}
+														onKeyDown={(e) => {
+															if (e.key === "Enter") {
+																setTemplate((prev) => ({
+																	...prev,
+																	columnLabels: {
+																		...prev.columnLabels,
+																		[field.id]:
+																			editingValue.trim() || field.label,
+																	},
+																}));
+																setEditingField(null);
+																setEditingValue("");
+															} else if (e.key === "Escape") {
+																setEditingField(null);
+																setEditingValue("");
+															}
+														}}
+														autoFocus
+														className="field-label-input"
+														style={{
+															flex: 1,
+															padding: "0.25rem",
+															border: "1px solid #2563eb",
+															borderRadius: "0.25rem",
+															fontSize: "0.875rem",
+															color: "#000000",
+															backgroundColor: "#ffffff",
+														}}
+													/>
+												) : (
+													<span
+														className="field-label"
+														onClick={() => {
+															setEditingField(field.id);
+															setEditingValue(label);
+														}}
+														style={{ cursor: "pointer" }}>
+														{template.columnLabels[field.id] &&
+														template.columnLabels[field.id] !== field.label ? (
+															<>
+																<span
+																	style={{
+																		color: "#6b7280",
+																		textDecoration: "line-through",
+																	}}>
+																	{field.label}
+																</span>
+																{" -> "}
+																<span
+																	style={{ fontWeight: 500, color: "#2563eb" }}>
+																	{label}
+																</span>
+																<Edit
+																	size={12}
+																	style={{
+																		marginLeft: "0.25rem",
+																		color: "#2563eb",
+																		verticalAlign: "middle",
+																	}}
+																/>
+															</>
+														) : (
+															label
+														)}
+													</span>
+												)}
+												{isActive && (
+													<div className="field-controls">
+														{isNumberField && (
+															<button
+																onClick={() => {
+																	setSelectedFieldForAggregation(field.id);
+																	setAggregationFields([field.id]);
+																	setAggregationLabel("");
+																	setAggregationType("add");
+																	setShowAggregationModal(true);
+																}}
+																className="field-control-button"
+																title="Create aggregation">
+																<Plus size={14} />
+															</button>
+														)}
+														<button
+															onClick={() =>
+																moveField("lineItems", null, field.id, "up")
+															}
+															disabled={index === 0}
+															className="field-control-button">
+															<ChevronUp size={14} />
+														</button>
+														<button
+															onClick={() =>
+																moveField("lineItems", null, field.id, "down")
+															}
+															disabled={index === template.lineItems.length - 1}
+															className="field-control-button">
+															<ChevronDown size={14} />
+														</button>
+													</div>
+												)}
+											</div>
+										);
+									})}
+								{/* Aggregation fields */}
+								{template.aggregations.map((agg) => {
+									const isActive = template.lineItems.includes(agg.id);
+									const index = template.lineItems.indexOf(agg.id);
+									const isEditing = editingField === agg.id;
+
 									return (
 										<div
-											key={field.id}
+											key={agg.id}
 											className={`field-item ${
 												isActive ? "field-item-active" : "field-item-inactive"
-											}`}>
+											}`}
+											style={{
+												backgroundColor: "#fef3c7",
+												borderColor: "#fbbf24",
+											}}>
 											<input
 												type="checkbox"
 												checked={isActive}
-												onChange={() =>
-													toggleField("lineItems", null, field.id)
-												}
+												onChange={() => toggleField("lineItems", null, agg.id)}
 												className="field-checkbox"
 											/>
-											<span className="field-label">{field.label}</span>
+											{isEditing ? (
+												<input
+													type="text"
+													value={editingValue}
+													onChange={(e) => setEditingValue(e.target.value)}
+													onBlur={() => {
+														setTemplate((prev) => ({
+															...prev,
+															aggregations: prev.aggregations.map((a) =>
+																a.id === agg.id
+																	? {
+																			...a,
+																			label: editingValue.trim() || agg.label,
+																	  }
+																	: a
+															),
+														}));
+														setEditingField(null);
+														setEditingValue("");
+													}}
+													onKeyDown={(e) => {
+														if (e.key === "Enter") {
+															setTemplate((prev) => ({
+																...prev,
+																aggregations: prev.aggregations.map((a) =>
+																	a.id === agg.id
+																		? {
+																				...a,
+																				label: editingValue.trim() || agg.label,
+																		  }
+																		: a
+																),
+															}));
+															setEditingField(null);
+															setEditingValue("");
+														} else if (e.key === "Escape") {
+															setEditingField(null);
+															setEditingValue("");
+														}
+													}}
+													autoFocus
+													className="field-label-input"
+													style={{
+														flex: 1,
+														padding: "0.25rem",
+														border: "1px solid #2563eb",
+														borderRadius: "0.25rem",
+														fontSize: "0.875rem",
+														color: "#000000",
+														backgroundColor: "#ffffff",
+													}}
+												/>
+											) : (
+												<span
+													className="field-label"
+													onClick={() => {
+														setEditingField(agg.id);
+														setEditingValue(agg.label);
+													}}
+													style={{ cursor: "pointer" }}>
+													{agg.label} (
+													{agg.fields.map((f) => getColumnLabel(f)).join(" + ")}
+													)
+												</span>
+											)}
 											{isActive && (
 												<div className="field-controls">
 													<button
+														onClick={() => removeAggregation(agg.id)}
+														className="field-control-button"
+														title="Remove aggregation">
+														<Trash2 size={14} />
+													</button>
+													<button
 														onClick={() =>
-															moveField("lineItems", null, field.id, "up")
+															moveField("lineItems", null, agg.id, "up")
 														}
 														disabled={index === 0}
 														className="field-control-button">
@@ -758,7 +1111,7 @@ const InvoiceTemplateCreator = () => {
 													</button>
 													<button
 														onClick={() =>
-															moveField("lineItems", null, field.id, "down")
+															moveField("lineItems", null, agg.id, "down")
 														}
 														disabled={index === template.lineItems.length - 1}
 														className="field-control-button">
@@ -891,6 +1244,187 @@ const InvoiceTemplateCreator = () => {
 				</div>
 			</div>
 
+			{/* Aggregation Modal */}
+			{showAggregationModal && (
+				<div
+					style={{
+						position: "fixed",
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+						backgroundColor: "rgba(0, 0, 0, 0.5)",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						zIndex: 1000,
+					}}
+					onClick={() => setShowAggregationModal(false)}>
+					<div
+						style={{
+							backgroundColor: "white",
+							padding: "1.5rem",
+							borderRadius: "0.5rem",
+							minWidth: "400px",
+							maxWidth: "600px",
+						}}
+						onClick={(e) => e.stopPropagation()}>
+						<h3 style={{ marginBottom: "1rem", fontWeight: 600 }}>
+							Create Aggregation
+						</h3>
+						<div style={{ marginBottom: "1rem" }}>
+							<label
+								style={{
+									display: "block",
+									marginBottom: "0.5rem",
+									fontWeight: 500,
+								}}>
+								Label:
+							</label>
+							<input
+								type="text"
+								value={aggregationLabel}
+								onChange={(e) => setAggregationLabel(e.target.value)}
+								placeholder="e.g., Total Tax"
+								style={{
+									width: "100%",
+									padding: "0.5rem",
+									border: "1px solid #e5e7eb",
+									borderRadius: "0.25rem",
+								}}
+							/>
+						</div>
+						<div style={{ marginBottom: "1rem" }}>
+							<label
+								style={{
+									display: "block",
+									marginBottom: "0.5rem",
+									fontWeight: 500,
+								}}>
+								Fields to aggregate:
+							</label>
+							<div
+								style={{
+									maxHeight: "200px",
+									overflowY: "auto",
+									border: "1px solid #e5e7eb",
+									borderRadius: "0.25rem",
+									padding: "0.5rem",
+								}}>
+								{AVAILABLE_FIELDS.lineItems
+									.filter(
+										(f) =>
+											f.type === "number" && !isFieldReplacedByAggregation(f.id)
+									)
+									.map((field) => (
+										<label
+											key={field.id}
+											style={{
+												display: "flex",
+												alignItems: "center",
+												gap: "0.5rem",
+												padding: "0.25rem",
+												cursor: "pointer",
+											}}>
+											<input
+												type="checkbox"
+												checked={aggregationFields.includes(field.id)}
+												onChange={(e) => {
+													if (e.target.checked) {
+														setAggregationFields([
+															...aggregationFields,
+															field.id,
+														]);
+													} else {
+														setAggregationFields(
+															aggregationFields.filter((f) => f !== field.id)
+														);
+													}
+												}}
+											/>
+											<span>{getColumnLabel(field.id)}</span>
+										</label>
+									))}
+							</div>
+						</div>
+						<div style={{ marginBottom: "1rem" }}>
+							<label
+								style={{
+									display: "block",
+									marginBottom: "0.5rem",
+									fontWeight: 500,
+								}}>
+								Type:
+							</label>
+							<select
+								value={aggregationType}
+								onChange={(e) => setAggregationType(e.target.value)}
+								style={{
+									width: "100%",
+									padding: "0.5rem",
+									border: "1px solid #e5e7eb",
+									borderRadius: "0.25rem",
+								}}>
+								<option value="add">Add as new column</option>
+								<option value="replace">Replace selected columns</option>
+							</select>
+						</div>
+						<div
+							style={{
+								display: "flex",
+								gap: "0.5rem",
+								justifyContent: "flex-end",
+							}}>
+							<button
+								onClick={() => setShowAggregationModal(false)}
+								style={{
+									padding: "0.5rem 1rem",
+									border: "1px solid #e5e7eb",
+									borderRadius: "0.25rem",
+									backgroundColor: "white",
+									cursor: "pointer",
+								}}>
+								Cancel
+							</button>
+							<button
+								onClick={() => {
+									if (aggregationFields.length > 0 && aggregationLabel.trim()) {
+										addAggregation(
+											aggregationFields,
+											aggregationLabel.trim(),
+											aggregationType
+										);
+										setShowAggregationModal(false);
+										setAggregationFields([]);
+										setAggregationLabel("");
+										setAggregationType("add");
+										setSelectedFieldForAggregation(null);
+									}
+								}}
+								disabled={
+									aggregationFields.length === 0 || !aggregationLabel.trim()
+								}
+								style={{
+									padding: "0.5rem 1rem",
+									border: "none",
+									borderRadius: "0.25rem",
+									backgroundColor:
+										aggregationFields.length > 0 && aggregationLabel.trim()
+											? "#2563eb"
+											: "#9ca3af",
+									color: "white",
+									cursor:
+										aggregationFields.length > 0 && aggregationLabel.trim()
+											? "pointer"
+											: "not-allowed",
+								}}>
+								Create
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
 			{/* Preview Panel */}
 			<div className="preview-container">
 				{/* Toolbar */}
@@ -1022,15 +1556,22 @@ const InvoiceTemplateCreator = () => {
 																	: undefined,
 																padding: `${cellPadding / 16}rem`,
 															}}>
-															SKU
+															{getColumnLabel("sku")}
 														</th>
 													)}
 													{template.lineItems
 														.filter((f) => f !== "sku")
 														.map((fieldId) => {
-															const field = AVAILABLE_FIELDS.lineItems.find(
-																(f) => f.id === fieldId
-															);
+															const aggregation =
+																getAggregationForColumn(fieldId);
+															const field = aggregation
+																? null
+																: AVAILABLE_FIELDS.lineItems.find(
+																		(f) => f.id === fieldId
+																  );
+															const label = aggregation
+																? aggregation.label
+																: getColumnLabel(fieldId);
 															return (
 																<th
 																	key={fieldId}
@@ -1045,7 +1586,7 @@ const InvoiceTemplateCreator = () => {
 																			: undefined,
 																		padding: `${cellPadding / 16}rem`,
 																	}}>
-																	{field.label}
+																	{label}
 																</th>
 															);
 														})}
@@ -1100,6 +1641,11 @@ const InvoiceTemplateCreator = () => {
 																		* Ct.Size ({item.ctSize})
 																	</div>
 																)}
+																{template.showBarcode && item.barcode && (
+																	<div className="invoice-sku-size">
+																		* Barcode ({item.barcode})
+																	</div>
+																)}
 															</td>
 														)}
 													</>
@@ -1108,11 +1654,32 @@ const InvoiceTemplateCreator = () => {
 											{template.lineItems
 												.filter((f) => f !== "sku")
 												.map((fieldId) => {
-													const field = AVAILABLE_FIELDS.lineItems.find(
-														(f) => f.id === fieldId
-													);
-													const value = item[fieldId];
+													const aggregation = getAggregationForColumn(fieldId);
+													const field = aggregation
+														? null
+														: AVAILABLE_FIELDS.lineItems.find(
+																(f) => f.id === fieldId
+														  );
 													const cellPadding = calculateCellPadding(paperSize);
+													let value;
+													let displayValue;
+
+													if (aggregation) {
+														value = calculateAggregatedValue(item, aggregation);
+														displayValue =
+															typeof value === "number"
+																? value.toFixed(2)
+																: "0.00";
+													} else {
+														value = item[fieldId];
+														displayValue =
+															field.type === "number"
+																? typeof value === "number"
+																	? value.toFixed(2)
+																	: "0.00"
+																: value;
+													}
+
 													return (
 														<td
 															key={fieldId}
@@ -1127,11 +1694,7 @@ const InvoiceTemplateCreator = () => {
 																	: undefined,
 																padding: `${cellPadding / 16}rem`,
 															}}>
-															{field.type === "number"
-																? typeof value === "number"
-																	? value.toFixed(2)
-																	: "0.00"
-																: value}
+															{displayValue}
 														</td>
 													);
 												})}

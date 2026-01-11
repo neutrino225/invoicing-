@@ -609,5 +609,17 @@ select {
     margin: 0;
     padding: 0;
   }
+  .editor-panel {
+    display: none !important;
+  }
+  .preview-content {
+    background: white !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .invoice-paper {
+    box-shadow: none;
+    margin: 0;
+  }
 }
 
