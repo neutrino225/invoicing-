@@ -1,5 +1,13 @@
 /* Invoice Generator Styles */
 
+/* Global Input Styles */
+input[type="text"],
+input[type="number"],
+select {
+  background-color: white;
+  box-sizing: border-box;
+}
+
 /* Layout */
 .invoice-container {
   display: flex;
@@ -10,6 +18,7 @@
 
 /* Editor Panel */
 .editor-panel {
+  position: relative;
   transition: all 0.3s;
   overflow: hidden;
   border-right: 1px solid #e5e7eb;
@@ -36,6 +45,8 @@
   border-radius: 0.5rem;
   font-weight: 600;
   color: #000000;
+  background-color: white;
+  box-sizing: border-box;
 }
 
 .editor-content {
@@ -46,6 +57,12 @@
 /* Section Styles */
 .section-container {
   border-bottom: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+  background-color: white;
+}
+
+.section-container:first-child {
+  border-top: none;
 }
 
 .section-button {
@@ -54,22 +71,34 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   background-color: #f9fafb;
   border: none;
+  border-bottom: 1px solid #e5e7eb;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .section-button:hover {
   background-color: #f3f4f6;
 }
 
+.section-button svg {
+  flex-shrink: 0;
+  color: #6b7280;
+  stroke-width: 2;
+}
+
 .section-title {
   font-weight: 600;
   color: #000000;
+  flex: 1;
 }
 
 .section-content {
   padding: 1rem;
+  background-color: white;
+  border-top: 1px solid #e5e7eb;
 }
 
 .section-content-spaced {
@@ -77,6 +106,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  background-color: white;
+  border-top: 1px solid #e5e7eb;
 }
 
 .section-content-spaced-sm {
@@ -84,6 +115,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  background-color: white;
+  border-top: 1px solid #e5e7eb;
 }
 
 /* Field Groups */
@@ -102,14 +135,18 @@
   padding: 0.5rem;
   border-radius: 0.25rem;
   margin-bottom: 0.5rem;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
 }
 
 .field-item-active {
   background-color: #eff6ff;
+  border-color: #bfdbfe;
 }
 
 .field-item-inactive {
   background-color: #f9fafb;
+  border-color: #e5e7eb;
 }
 
 .field-checkbox {
@@ -190,6 +227,8 @@
   border-radius: 0.5rem;
   font-size: 0.875rem;
   color: #000000;
+  background-color: white;
+  box-sizing: border-box;
 }
 
 .settings-range {
@@ -210,6 +249,7 @@
 
 .settings-checkbox {
   border-radius: 0.25rem;
+  cursor: pointer;
 }
 
 .settings-checkbox-label {
@@ -223,6 +263,7 @@
   padding: 0.5rem;
   background-color: #eff6ff;
   border-radius: 0.25rem;
+  border: 1px solid #bfdbfe;
 }
 
 .option-label {
@@ -369,7 +410,7 @@
   flex: 1;
   text-align: center;
   font-weight: 700;
-  font-size: 1.125rem;
+  font-size: 1.25em;
   color: #000000;
 }
 
@@ -405,7 +446,6 @@
 }
 
 .invoice-header-field {
-  font-size: 0.75rem;
   color: #000000;
 }
 
@@ -423,11 +463,14 @@
   border-bottom: 2px solid black;
   padding-bottom: 0.75rem;
   margin-bottom: 0.75rem;
+  overflow-x: hidden;
 }
 
 .invoice-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+  box-sizing: border-box;
 }
 
 .invoice-table-header {
@@ -437,9 +480,9 @@
 .invoice-table-header-cell {
   padding: 0.25rem 0.5rem;
   text-align: left;
-  font-size: 0.75rem;
   font-weight: 700;
   color: #000000;
+  box-sizing: border-box;
 }
 
 .invoice-table-header-cell-right {
@@ -456,9 +499,11 @@
 
 .invoice-table-cell {
   padding: 0.5rem;
-  font-size: 0.75rem;
   vertical-align: top;
   color: #000000;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
 }
 
 .invoice-table-cell-right {
@@ -471,7 +516,7 @@
 
 .invoice-sku-cell {
   word-wrap: break-word;
-  max-width: 150px;
+  overflow-wrap: break-word;
 }
 
 .invoice-sku-name {
@@ -510,14 +555,12 @@
 .invoice-summary-label {
   padding: 0.25rem 0;
   padding-right: 1rem;
-  font-size: 0.75rem;
   font-weight: 600;
   color: #000000;
 }
 
 .invoice-summary-value {
   padding: 0.25rem 0;
-  font-size: 0.75rem;
   text-align: right;
   font-family: monospace;
   border-left: 1px solid #d1d5db;
@@ -536,7 +579,6 @@
 }
 
 .invoice-sign-title {
-  font-size: 0.75rem;
   font-weight: 600;
   margin-bottom: 2rem;
   color: #000000;
@@ -545,7 +587,6 @@
 .invoice-sign-date {
   border-top: 1px solid black;
   padding-top: 0.25rem;
-  font-size: 0.75rem;
   color: #4b5563;
 }
 
