@@ -49,6 +49,38 @@ select {
   box-sizing: border-box;
 }
 
+.editor-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.editor-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+.editor-select-chevron {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.editor-select:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.editor-select:focus + .editor-select-chevron {
+  color: #2563eb;
+}
+
 .editor-content {
   overflow-y: auto;
   height: calc(100vh - 180px);
@@ -75,6 +107,7 @@ select {
   background-color: #f9fafb;
   border: none;
   border-bottom: 1px solid #e5e7eb;
+  border-radius: 0;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }

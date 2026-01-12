@@ -19,7 +19,7 @@ const PLACEHOLDER_DATA = {
 		invoiceType: "Commercial Invoice",
 		cnic: "12345-6789012-3",
 		phone: "0321-1234567",
-		address: "Potohhar Rd, I-8/3 I-9 I-9, Islamabad, 44000, Pakistan",
+		address: "Potohhar Rd, I-9/3 Islamabad, 44000, Pakistan",
 		invoiceNo: "OBD97395",
 		bookingDate: "2026-01-08",
 		deliveryDate: "2026-01-08",
@@ -60,8 +60,8 @@ const PLACEHOLDER_DATA = {
 			grossValue: 0.18,
 			others: 36,
 			getValue: 0,
-			advanceTax: 0,
-			gst: 0,
+			advanceTax: 2,
+			gst: 3,
 		},
 		{
 			sku: "PREMIUM GREEN TEA 250 GM",
@@ -640,15 +640,17 @@ const InvoiceTemplateCreator = () => {
 						className="editor-input"
 						placeholder="Template Name"
 					/>
-					<select
-						value={paperSize}
-						onChange={(e) => setPaperSize(e.target.value)}
-						className="editor-input"
-						style={{ marginTop: "0.5rem" }}>
-						<option value="A4">A4</option>
-						<option value="A5">A5</option>
-						<option value="Letter">Letter</option>
-					</select>
+					<div className="editor-select-wrapper" style={{ marginTop: "0.5rem" }}>
+						<select
+							value={paperSize}
+							onChange={(e) => setPaperSize(e.target.value)}
+							className="editor-input editor-select">
+							<option value="A4">A4</option>
+							<option value="A5">A5</option>
+							<option value="Letter">Letter</option>
+						</select>
+						<ChevronDown size={18} className="editor-select-chevron" />
+					</div>
 				</div>
 
 				<div className="editor-content">
@@ -1269,7 +1271,7 @@ const InvoiceTemplateCreator = () => {
 							maxWidth: "600px",
 						}}
 						onClick={(e) => e.stopPropagation()}>
-						<h3 style={{ marginBottom: "1rem", fontWeight: 600 }}>
+						<h3 style={{ marginBottom: "1rem", fontWeight: 600, color: "#000000" }}>
 							Create Aggregation
 						</h3>
 						<div style={{ marginBottom: "1rem" }}>
@@ -1278,6 +1280,7 @@ const InvoiceTemplateCreator = () => {
 									display: "block",
 									marginBottom: "0.5rem",
 									fontWeight: 500,
+									color: "#000000",
 								}}>
 								Label:
 							</label>
@@ -1291,6 +1294,8 @@ const InvoiceTemplateCreator = () => {
 									padding: "0.5rem",
 									border: "1px solid #e5e7eb",
 									borderRadius: "0.25rem",
+									color: "#000000",
+									backgroundColor: "#ffffff",
 								}}
 							/>
 						</div>
@@ -1300,6 +1305,7 @@ const InvoiceTemplateCreator = () => {
 									display: "block",
 									marginBottom: "0.5rem",
 									fontWeight: 500,
+									color: "#000000",
 								}}>
 								Fields to aggregate:
 							</label>
@@ -1325,6 +1331,7 @@ const InvoiceTemplateCreator = () => {
 												gap: "0.5rem",
 												padding: "0.25rem",
 												cursor: "pointer",
+												color: "#000000",
 											}}>
 											<input
 												type="checkbox"
@@ -1342,7 +1349,7 @@ const InvoiceTemplateCreator = () => {
 													}
 												}}
 											/>
-											<span>{getColumnLabel(field.id)}</span>
+											<span style={{ color: "#000000" }}>{getColumnLabel(field.id)}</span>
 										</label>
 									))}
 							</div>
@@ -1353,6 +1360,7 @@ const InvoiceTemplateCreator = () => {
 									display: "block",
 									marginBottom: "0.5rem",
 									fontWeight: 500,
+									color: "#000000",
 								}}>
 								Type:
 							</label>
@@ -1364,6 +1372,8 @@ const InvoiceTemplateCreator = () => {
 									padding: "0.5rem",
 									border: "1px solid #e5e7eb",
 									borderRadius: "0.25rem",
+									color: "#000000",
+									backgroundColor: "#ffffff",
 								}}>
 								<option value="add">Add as new column</option>
 								<option value="replace">Replace selected columns</option>
@@ -1382,6 +1392,7 @@ const InvoiceTemplateCreator = () => {
 									border: "1px solid #e5e7eb",
 									borderRadius: "0.25rem",
 									backgroundColor: "white",
+									color: "#000000",
 									cursor: "pointer",
 								}}>
 								Cancel
@@ -1585,6 +1596,7 @@ const InvoiceTemplateCreator = () => {
 																			? `${columnWidths[fieldId]}px`
 																			: undefined,
 																		padding: `${cellPadding / 16}rem`,
+																		color: "#000000",
 																	}}>
 																	{label}
 																</th>
@@ -1693,6 +1705,7 @@ const InvoiceTemplateCreator = () => {
 																	? `${columnWidths[fieldId]}px`
 																	: undefined,
 																padding: `${cellPadding / 16}rem`,
+																color: "#000000",
 															}}>
 															{displayValue}
 														</td>
