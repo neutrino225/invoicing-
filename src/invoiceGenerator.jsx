@@ -9,8 +9,24 @@ import {
 	Settings,
 	ChevronDown,
 	ChevronUp,
+	FolderOpen,
 } from "lucide-react";
 import "./invoiceGenerator.css";
+import { fetchInvoiceData } from "./api/invoiceApi";
+import { mapApiDataToInvoice } from "./utils/invoiceDataMapper";
+import {
+	fetchTemplates,
+	fetchTemplate,
+	createTemplate,
+} from "./api/templateApi";
+import {
+	generateTemplateHtml,
+	generateMappings,
+	generateAggregations,
+} from "./utils/templateHtmlGenerator";
+import { serializeTemplateState, deserializeTemplateState } from "./utils/templateSerializer";
+import TemplateSaveDialog from "./components/TemplateSaveDialog";
+import TemplateManager from "./components/TemplateManager";
 
 // Placeholder invoice data
 const PLACEHOLDER_DATA = {
@@ -38,13 +54,16 @@ const PLACEHOLDER_DATA = {
 			rp: 851,
 			tp: 102120,
 			tpVal: 2400.0,
-			tradeOffer: 1548.0,
-			slabDisc: 98172,
+			firstDisc: 1548.0,
+			secondDisc: 0,
+			thirdDisc: 500,
+			fourthDisc: 0,
 			grossValue: 490.86,
 			others: 98663,
-			getValue: 0,
-			advanceTax: 0,
+			gstPercent: 0,
 			gst: 0,
+			advanceTax: 0,
+			netValue: 0,
 		},
 		{
 			sku: "REFINED PINK SALT 800 GM",
@@ -55,13 +74,16 @@ const PLACEHOLDER_DATA = {
 			rp: 55,
 			tp: 55,
 			tpVal: 19.33,
-			tradeOffer: 0.0,
-			slabDisc: 35.67,
+			firstDisc: 0.0,
+			secondDisc: 35.67,
+			thirdDisc: 0,
+			fourthDisc: 0,
 			grossValue: 0.18,
 			others: 36,
-			getValue: 0,
-			advanceTax: 2,
+			gstPercent: 0,
 			gst: 3,
+			advanceTax: 2,
+			netValue: 0,
 		},
 		{
 			sku: "PREMIUM GREEN TEA 250 GM",
@@ -72,13 +94,16 @@ const PLACEHOLDER_DATA = {
 			rp: 450,
 			tp: 5400,
 			tpVal: 1200.0,
-			tradeOffer: 540.0,
-			slabDisc: 4860,
+			firstDisc: 540.0,
+			secondDisc: 0,
+			thirdDisc: 0,
+			fourthDisc: 120,
 			grossValue: 250.0,
 			others: 5110,
-			getValue: 0,
-			advanceTax: 0,
+			gstPercent: 0,
 			gst: 0,
+			advanceTax: 0,
+			netValue: 0,
 		},
 	],
 	summary: {
@@ -105,6 +130,11 @@ const AVAILABLE_FIELDS = {
 			{ id: "address", label: "Address" },
 		],
 		right: [
+			// Distributor fields
+			{ id: "distributorAddress", label: "Distributor Address" },
+			{ id: "distributorNTN", label: "Distributor NTN" },
+			{ id: "distributorSTN", label: "Distributor STN" },
+			// Order fields
 			{ id: "tcn", label: "TCN" },
 			{ id: "invoiceNo", label: "Invoice No" },
 			{ id: "bookingDate", label: "Booking" },
@@ -115,25 +145,30 @@ const AVAILABLE_FIELDS = {
 	},
 	lineItems: [
 		{ id: "sku", label: "SKU / Product", type: "text" },
-		{ id: "ctSize", label: "Ct.Size", type: "text" },
 		{ id: "ctn", label: "Ctn", type: "number" },
 		{ id: "pcs", label: "Pcs", type: "number" },
 		{ id: "rp", label: "R.P", type: "number" },
 		{ id: "tp", label: "T.P", type: "number" },
 		{ id: "tpVal", label: "TP Val", type: "number" },
-		{ id: "tradeOffer", label: "Trade Offer", type: "number" },
-		{ id: "slabDisc", label: "Slab Disc", type: "number" },
+		{ id: "firstDisc", label: "First Disc", type: "number" },
+		{ id: "secondDisc", label: "Second Disc", type: "number" },
+		{ id: "thirdDisc", label: "Third Disc", type: "number" },
+		{ id: "fourthDisc", label: "Fourth Disc", type: "number" },
 		{ id: "grossValue", label: "Gross Value", type: "number" },
 		{ id: "others", label: "Others", type: "number" },
-		{ id: "getValue", label: "Get Value", type: "number" },
+		{ id: "gstPercent", label: "GST %", type: "number" },
+		{ id: "gst", label: "GST Val", type: "number" },
 		{ id: "advanceTax", label: "Advance Tax", type: "number" },
-		{ id: "gst", label: "GST", type: "number" },
+		{ id: "netValue", label: "Net Val", type: "number" },
 	],
 	summary: [
 		{ id: "totalQty", label: "Total Qty" },
 		{ id: "tpValue", label: "TP Value" },
 		{ id: "totalDiscount", label: "Total Discount" },
+		{ id: "totalDiscountPercent", label: "Total Discount %" },
 		{ id: "grossValue", label: "Gross Value" },
+		{ id: "totalGSTValue", label: "Total GST" },
+		{ id: "totalADTValue", label: "Total Advance Tax" },
 		{ id: "others", label: "Others" },
 		{ id: "netValue", label: "Net Value" },
 	],
@@ -181,15 +216,18 @@ const COLUMN_TYPES = {
 		"rp",
 		"tp",
 		"tpVal",
-		"tradeOffer",
-		"slabDisc",
+		"firstDisc",
+		"secondDisc",
+		"thirdDisc",
+		"fourthDisc",
 		"grossValue",
 		"others",
-		"getValue",
-		"advanceTax",
+		"gstPercent",
 		"gst",
+		"advanceTax",
+		"netValue",
 	],
-	TEXT: ["ctSize"],
+	TEXT: [],
 };
 
 // Base minimum and optimal widths (in pixels) for A4
@@ -239,12 +277,22 @@ const InvoiceTemplateCreator = () => {
 	const [paperSize, setPaperSize] = useState("A4");
 	const printRef = useRef(null);
 
+	// Invoice data state
+	const [invoiceData, setInvoiceData] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState(null);
+
 	// Template configuration
 	const [template, setTemplate] = useState({
 		header: {
 			topRow: ["companyName", "invoiceType"],
 			left: ["customerName", "cnic", "phone", "address"],
 			right: [
+				// Distributor fields
+				"distributorAddress",
+				"distributorNTN",
+				"distributorSTN",
+				// Order fields
 				"tcn",
 				"invoiceNo",
 				"bookingDate",
@@ -260,38 +308,57 @@ const InvoiceTemplateCreator = () => {
 			"rp",
 			"tp",
 			"tpVal",
-			"tradeOffer",
-			"slabDisc",
+			"firstDisc",
+			"secondDisc",
+			"thirdDisc",
+			"fourthDisc",
 			"grossValue",
 			"others",
-			"getValue",
+			"gstPercent",
+			"gst",
+			"advanceTax",
+			"netValue",
 		],
 		summary: [
 			"totalQty",
 			"tpValue",
 			"totalDiscount",
+			"totalDiscountPercent",
 			"grossValue",
-			"others",
+			"totalGSTValue",
+			"totalADTValue",
 			"netValue",
 		],
 		showCtSize: true,
 		showBarcode: false,
+		showHsCode: false,
 		summaryLayout: "split", // 'split' or 'full'
 		fontSize: 9,
 		showTableBorders: false,
 		columnLabels: {},
 		aggregations: [],
+		footer: [], // Array of rows, each row is an array of { text, align } objects
 	});
 
 	const [expandedSections, setExpandedSections] = useState({
 		header: true,
 		lineItems: true,
 		summary: true,
+		footer: true,
 	});
 
 	// State for table overflow handling
 	const [columnWidths, setColumnWidths] = useState({});
 	const [adjustedFontSize, setAdjustedFontSize] = useState(null);
+
+	// Template management state
+	const [savedTemplates, setSavedTemplates] = useState([]);
+	const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+	const [showSaveDialog, setShowSaveDialog] = useState(false);
+	const [showTemplateManager, setShowTemplateManager] = useState(false);
+	const [templatesLoading, setTemplatesLoading] = useState(false);
+	const [templateLoadingId, setTemplateLoadingId] = useState(null); // ID of template being loaded
+	const [templateSaving, setTemplateSaving] = useState(false);
 
 	const toggleField = (section, subsection, field) => {
 		if (section === "header") {
@@ -344,8 +411,7 @@ const InvoiceTemplateCreator = () => {
 	};
 
 	const saveTemplate = () => {
-		console.log("Saving template:", { name: templateName, config: template });
-		alert("Template saved! (In production, this would save to your backend)");
+		setShowSaveDialog(true);
 	};
 
 	const toggleSection = (section) => {
@@ -625,6 +691,123 @@ const InvoiceTemplateCreator = () => {
 		setAdjustedFontSize(null);
 	}, [paperSize, template.lineItems, template.fontSize]);
 
+	// Fetch invoice data on component mount
+	useEffect(() => {
+		const loadInvoiceData = async () => {
+			setLoading(true);
+			setError(null);
+			try {
+				const apiData = await fetchInvoiceData();
+				const mappedData = mapApiDataToInvoice(apiData);
+				setInvoiceData(mappedData);
+			} catch (err) {
+				console.error("Failed to load invoice data:", err);
+				setError(err.message || "Failed to load invoice data");
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		loadInvoiceData();
+	}, []);
+
+	// Handle template selection
+	const handleLoadTemplate = async (templateId) => {
+		setTemplateLoadingId(templateId);
+		try {
+			const templateData = await fetchTemplate(templateId);
+			if (templateData.template_config) {
+				const restoredState = deserializeTemplateState(templateData.template_config);
+				if (restoredState) {
+					setTemplate(restoredState);
+					setTemplateName(templateData.name);
+					setSelectedTemplateId(templateId);
+					// Restore paper size from template config
+					if (restoredState.paperSize) {
+						setPaperSize(restoredState.paperSize);
+					}
+				}
+			}
+		} catch (err) {
+			console.error("Failed to load template:", err);
+			alert("Failed to load template");
+		} finally {
+			setTemplateLoadingId(null);
+		}
+	};
+
+	// Handle save template
+	const handleSaveTemplate = async (saveData) => {
+		setTemplateSaving(true);
+		try {
+			// Generate HTML with placeholders, including calculated column widths
+			const html = generateTemplateHtml(template, invoiceData || PLACEHOLDER_DATA, paperSize, columnWidths);
+
+			// Generate mappings and aggregations
+			const mappings = generateMappings(template);
+			const aggregations = generateAggregations(template);
+
+			// Serialize template state
+			const templateConfig = serializeTemplateState(template);
+
+			// Create template
+			const templateData = {
+				name: saveData.name,
+				description: saveData.description,
+				html: html,
+				template_config: templateConfig,
+				is_default: saveData.is_default,
+				mappings: mappings,
+				aggregations: aggregations,
+			};
+
+			const savedTemplate = await createTemplate(templateData);
+
+			// Reload templates
+			const templates = await fetchTemplates();
+			setSavedTemplates(templates);
+
+			// Update selected template and name
+			if (savedTemplate && savedTemplate.id) {
+				setSelectedTemplateId(savedTemplate.id);
+				setTemplateName(savedTemplate.name);
+			}
+
+			alert("Template saved successfully!");
+		} catch (err) {
+			console.error("Failed to save template:", err);
+			throw err;
+		} finally {
+			setTemplateSaving(false);
+		}
+	};
+
+	// Load saved templates on mount
+	useEffect(() => {
+		const loadTemplates = async () => {
+			setTemplatesLoading(true);
+			try {
+				const templates = await fetchTemplates();
+				setSavedTemplates(templates);
+				// Set default template if available
+				const defaultTemplate = templates.find((t) => t.is_default);
+				if (defaultTemplate) {
+					handleLoadTemplate(defaultTemplate.id);
+				}
+			} catch (err) {
+				console.error("Failed to load templates:", err);
+			} finally {
+				setTemplatesLoading(false);
+			}
+		};
+
+		loadTemplates();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	// Use invoiceData if available, otherwise fallback to PLACEHOLDER_DATA
+	const currentInvoiceData = invoiceData || PLACEHOLDER_DATA;
+
 	return (
 		<div className="invoice-container">
 			{/* Editor Panel */}
@@ -862,6 +1045,24 @@ const InvoiceTemplateCreator = () => {
 										/>
 										<span className="option-text">
 											Show Barcode under SKU name
+										</span>
+									</label>
+								</div>
+								<div className="option-box">
+									<label className="option-label">
+										<input
+											type="checkbox"
+											checked={template.showHsCode}
+											onChange={(e) =>
+												setTemplate((prev) => ({
+													...prev,
+													showHsCode: e.target.checked,
+												}))
+											}
+											className="field-checkbox"
+										/>
+										<span className="option-text">
+											Show HS Code under SKU name
 										</span>
 									</label>
 								</div>
@@ -1185,6 +1386,231 @@ const InvoiceTemplateCreator = () => {
 						)}
 					</div>
 
+					{/* Footer Section */}
+					<div className="section-container">
+						<button
+							onClick={() => toggleSection("footer")}
+							className="section-button">
+							<span className="section-title">Footer Text</span>
+							{expandedSections.footer ? (
+								<ChevronUp size={20} />
+							) : (
+								<ChevronDown size={20} />
+							)}
+						</button>
+						{expandedSections.footer && (
+							<div className="section-content">
+								<div style={{ marginBottom: "1rem" }}>
+									<button
+										onClick={() => {
+											setTemplate((prev) => ({
+												...prev,
+												footer: [...(prev.footer || []), [{ text: "", align: "left" }]],
+											}));
+										}}
+										style={{
+											padding: "0.5rem 1rem",
+											backgroundColor: "#2563eb",
+											color: "white",
+											border: "none",
+											borderRadius: "0.25rem",
+											cursor: "pointer",
+											display: "flex",
+											alignItems: "center",
+											gap: "0.5rem",
+											fontSize: "0.875rem",
+											fontWeight: 500,
+										}}>
+										<Plus size={16} />
+										Add Row
+									</button>
+								</div>
+								{template.footer && template.footer.length > 0 ? (
+									<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+										{template.footer.map((row, rowIndex) => (
+											<div
+												key={rowIndex}
+												style={{
+													border: "1px solid #e5e7eb",
+													borderRadius: "0.5rem",
+													padding: "0.75rem",
+													backgroundColor: "#f9fafb",
+												}}>
+												<div
+													style={{
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center",
+														marginBottom: "0.5rem",
+													}}>
+													<span style={{ fontSize: "0.875rem", fontWeight: 500, color: "#000000" }}>
+														Row {rowIndex + 1}
+													</span>
+													<div style={{ display: "flex", gap: "0.5rem" }}>
+														<button
+															onClick={() => {
+																setTemplate((prev) => ({
+																	...prev,
+																	footer: prev.footer.map((r, idx) =>
+																		idx === rowIndex
+																			? [...r, { text: "", align: "left" }]
+																			: r
+																	),
+																}));
+															}}
+															style={{
+																padding: "0.25rem 0.5rem",
+																backgroundColor: "#10b981",
+																color: "white",
+																border: "none",
+																borderRadius: "0.25rem",
+																cursor: "pointer",
+																fontSize: "0.75rem",
+																display: "flex",
+																alignItems: "center",
+																gap: "0.25rem",
+															}}
+															title="Add column to this row">
+															<Plus size={12} />
+															Add Column
+														</button>
+														<button
+															onClick={() => {
+																setTemplate((prev) => ({
+																	...prev,
+																	footer: prev.footer.filter((_, idx) => idx !== rowIndex),
+																}));
+															}}
+															style={{
+																padding: "0.25rem 0.5rem",
+																backgroundColor: "#ef4444",
+																color: "white",
+																border: "none",
+																borderRadius: "0.25rem",
+																cursor: "pointer",
+																fontSize: "0.75rem",
+																display: "flex",
+																alignItems: "center",
+																gap: "0.25rem",
+															}}
+															title="Delete this row">
+															<Trash2 size={12} />
+															Delete Row
+														</button>
+													</div>
+												</div>
+												<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+													{row.map((cell, cellIndex) => (
+														<div
+															key={cellIndex}
+															style={{
+																display: "flex",
+																gap: "0.5rem",
+																alignItems: "center",
+															}}>
+															<input
+																type="text"
+																value={cell.text}
+																onChange={(e) => {
+																	setTemplate((prev) => ({
+																		...prev,
+																		footer: prev.footer.map((r, idx) =>
+																			idx === rowIndex
+																				? r.map((c, cidx) =>
+																						cidx === cellIndex
+																							? { ...c, text: e.target.value }
+																							: c
+																				  )
+																				: r
+																		),
+																	}));
+																}}
+																placeholder="Enter footer text..."
+																style={{
+																	flex: 1,
+																	padding: "0.5rem",
+																	border: "1px solid #e5e7eb",
+																	borderRadius: "0.25rem",
+																	fontSize: "0.875rem",
+																	color: "#000000",
+																	backgroundColor: "#ffffff",
+																}}
+															/>
+															<select
+																value={cell.align}
+																onChange={(e) => {
+																	setTemplate((prev) => ({
+																		...prev,
+																		footer: prev.footer.map((r, idx) =>
+																			idx === rowIndex
+																				? r.map((c, cidx) =>
+																						cidx === cellIndex
+																							? { ...c, align: e.target.value }
+																							: c
+																				  )
+																				: r
+																		),
+																	}));
+																}}
+																style={{
+																	padding: "0.5rem",
+																	border: "1px solid #e5e7eb",
+																	borderRadius: "0.25rem",
+																	fontSize: "0.875rem",
+																	color: "#000000",
+																	backgroundColor: "#ffffff",
+																	cursor: "pointer",
+																}}>
+																<option value="left">Left</option>
+																<option value="center">Center</option>
+																<option value="right">Right</option>
+															</select>
+															{row.length > 1 && (
+																<button
+																	onClick={() => {
+																		setTemplate((prev) => ({
+																			...prev,
+																			footer: prev.footer.map((r, idx) =>
+																				idx === rowIndex
+																					? r.filter((_, cidx) => cidx !== cellIndex)
+																					: r
+																			),
+																		}));
+																	}}
+																	style={{
+																		padding: "0.25rem 0.5rem",
+																		backgroundColor: "#ef4444",
+																		color: "white",
+																		border: "none",
+																		borderRadius: "0.25rem",
+																		cursor: "pointer",
+																		fontSize: "0.75rem",
+																	}}
+																	title="Delete this column">
+																	<Trash2 size={12} />
+																</button>
+															)}
+														</div>
+													))}
+												</div>
+											</div>
+										))}
+									</div>
+								) : (
+									<div
+										style={{
+											padding: "1rem",
+											textAlign: "center",
+											color: "#6b7280",
+											fontSize: "0.875rem",
+										}}>
+										No footer text added. Click "Add Row" to get started.
+									</div>
+								)}
+							</div>
+						)}
+					</div>
+
 					{/* Settings */}
 					<div className="settings-container">
 						<div className="settings-group">
@@ -1239,9 +1665,25 @@ const InvoiceTemplateCreator = () => {
 				</div>
 
 				<div className="save-container">
-					<button onClick={saveTemplate} className="save-button">
-						<Save size={18} />
-						Save Template
+					<button 
+						onClick={saveTemplate} 
+						className="save-button"
+						disabled={templateSaving}
+						style={{
+							opacity: templateSaving ? 0.7 : 1,
+							cursor: templateSaving ? "not-allowed" : "pointer",
+						}}>
+						{templateSaving ? (
+							<>
+								<div className="spinner" style={{ width: "18px", height: "18px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+								Saving...
+							</>
+						) : (
+							<>
+								<Save size={18} />
+								Save Template
+							</>
+						)}
 					</button>
 				</div>
 			</div>
@@ -1441,6 +1883,63 @@ const InvoiceTemplateCreator = () => {
 				{/* Toolbar */}
 				<div className="toolbar">
 					<div className="toolbar-group">
+						{/* Template Selector */}
+						<select
+							value={selectedTemplateId || ""}
+							onChange={(e) => {
+								const templateId = e.target.value ? parseInt(e.target.value) : null;
+								if (templateId) {
+									handleLoadTemplate(templateId);
+								} else {
+									setSelectedTemplateId(null);
+									setTemplateName("New Template");
+								}
+							}}
+							disabled={templatesLoading || templateLoadingId !== null}
+							style={{
+								padding: "0.5rem 1rem",
+								border: "1px solid #e5e7eb",
+								borderRadius: "0.25rem",
+								backgroundColor: templatesLoading || templateLoadingId !== null ? "#f3f4f6" : "white",
+								color: templatesLoading || templateLoadingId !== null ? "#9ca3af" : "#000000",
+								fontSize: "0.875rem",
+								marginRight: "0.5rem",
+								cursor: templatesLoading || templateLoadingId !== null ? "not-allowed" : "pointer",
+								position: "relative",
+							}}>
+							<option value="">
+								{templatesLoading ? "Loading templates..." : "New Template"}
+							</option>
+							{savedTemplates.map((t) => (
+								<option key={t.id} value={t.id}>
+									{templateLoadingId === t.id ? "Loading..." : t.name} {t.is_default ? "(Default)" : ""}
+								</option>
+							))}
+						</select>
+						{(templatesLoading || templateLoadingId !== null) && (
+							<span
+								style={{
+									marginLeft: "0.5rem",
+									display: "inline-flex",
+									alignItems: "center",
+									color: "#6b7280",
+									fontSize: "0.875rem",
+								}}>
+								<div
+									className="spinner"
+									style={{
+										width: "14px",
+										height: "14px",
+										border: "2px solid #e5e7eb",
+										borderTop: "2px solid #21b464",
+										borderRadius: "50%",
+										animation: "spin 0.8s linear infinite",
+										marginRight: "0.25rem",
+									}}
+								/>
+								{templateLoadingId !== null ? "Loading template..." : "Loading templates..."}
+							</span>
+						)}
 						<button
 							onClick={() => setMode(mode === "edit" ? "preview" : "edit")}
 							className={`toolbar-button ${
@@ -1461,6 +1960,12 @@ const InvoiceTemplateCreator = () => {
 							<Eye size={18} />
 							Preview
 						</button>
+						<button
+							onClick={() => setShowTemplateManager(true)}
+							className="toolbar-button"
+							title="Manage Templates">
+							<FolderOpen size={18} />
+						</button>
 					</div>
 					<button onClick={handlePrint} className="toolbar-button-print">
 						Print / PDF
@@ -1469,25 +1974,119 @@ const InvoiceTemplateCreator = () => {
 
 				{/* Invoice Preview */}
 				<div className="preview-content">
-					<div
-						ref={printRef}
-						className="invoice-paper"
-						style={{
-							width: PAPER_SIZES[paperSize].width,
-							minHeight: PAPER_SIZES[paperSize].height,
-							padding: `${calculatePadding(paperSize)}mm`,
-							fontSize: `${template.fontSize}px`,
-						}}>
+					{loading && (
+						<div
+							style={{
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "center",
+								justifyContent: "center",
+								padding: "3rem",
+								color: "#6b7280",
+							}}>
+							<div
+								style={{
+									border: "4px solid #e5e7eb",
+									borderTop: "4px solid #2563eb",
+									borderRadius: "50%",
+									width: "40px",
+									height: "40px",
+									animation: "spin 1s linear infinite",
+									marginBottom: "1rem",
+								}}></div>
+							<div>Loading invoice data...</div>
+						</div>
+					)}
+
+					{error && !loading && (
+						<div
+							style={{
+								padding: "2rem",
+								backgroundColor: "#fef2f2",
+								border: "1px solid #fecaca",
+								borderRadius: "0.5rem",
+								color: "#991b1b",
+								margin: "2rem",
+							}}>
+							<div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>
+								Error loading invoice data
+							</div>
+							<div style={{ fontSize: "0.875rem" }}>{error}</div>
+							<div style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#6b7280" }}>
+								Using placeholder data for preview.
+							</div>
+						</div>
+					)}
+
+					{!loading && (
+						<div
+							ref={printRef}
+							className="invoice-paper"
+							data-paper-size={paperSize}
+							style={{
+								width: PAPER_SIZES[paperSize].width,
+								minHeight: PAPER_SIZES[paperSize].height,
+								padding: `${calculatePadding(paperSize)}mm`,
+								fontSize: `${template.fontSize}px`,
+							}}>
 						{/* Top Border */}
 						<div className="invoice-top-border">
 							<div className="invoice-top-content">
+								{/* Logo on the left */}
+								{currentInvoiceData.header.logo && (
+									<div className="invoice-top-logo">
+										<img
+											src={currentInvoiceData.header.logo}
+											alt="Distributor Logo"
+											style={{
+												maxWidth: "80px",
+												maxHeight: "80px",
+												objectFit: "contain",
+											}}
+										/>
+									</div>
+								)}
+								{/* Center section with company name and order status centered, invoice type on right */}
 								<div className="invoice-top-center">
-									{template.header.topRow.map((fieldId, idx) => (
-										<span key={fieldId}>
-											{idx > 0 && <span className="invoice-top-spacer"></span>}
-											{PLACEHOLDER_DATA.header[fieldId]}
-										</span>
-									))}
+									{/* Centered company name and order status */}
+									<div className="invoice-top-company">
+										{template.header.topRow
+											.filter((fieldId) => fieldId === "companyName")
+											.map((fieldId) => (
+												<div
+													key={fieldId}
+													style={{ fontWeight: 700, fontSize: "1.25em", textAlign: "center" }}>
+													{currentInvoiceData.header[fieldId]}
+												</div>
+											))}
+										{currentInvoiceData.header.orderStatus && (
+											<div
+												style={{
+													fontSize: "0.875em",
+													fontWeight: 500,
+													marginTop: "0.25rem",
+													color: "#6b7280",
+													textAlign: "center",
+												}}>
+												{currentInvoiceData.header.orderStatus}
+											</div>
+										)}
+									</div>
+								</div>
+								{/* Invoice type on the right */}
+								<div style={{ display: "flex", alignItems: "center" }}>
+									{template.header.topRow
+										.filter((fieldId) => fieldId === "invoiceType")
+										.map((fieldId) => (
+											<div
+												key={fieldId}
+												style={{
+													fontWeight: 700,
+													fontSize: "1.25em",
+												}}>
+												{currentInvoiceData.header[fieldId]}
+											</div>
+										))}
 								</div>
 							</div>
 						</div>
@@ -1506,7 +2105,7 @@ const InvoiceTemplateCreator = () => {
 												<span className="invoice-header-label">
 													{field.label}:{" "}
 												</span>
-												<span>{PLACEHOLDER_DATA.header[fieldId]}</span>
+												<span>{currentInvoiceData.header[fieldId]}</span>
 											</div>
 										);
 									})}
@@ -1523,7 +2122,7 @@ const InvoiceTemplateCreator = () => {
 												<span className="invoice-header-label">
 													{field.label}:{" "}
 												</span>
-												<span>{PLACEHOLDER_DATA.header[fieldId]}</span>
+												<span>{currentInvoiceData.header[fieldId]}</span>
 											</div>
 										);
 									})}
@@ -1608,7 +2207,7 @@ const InvoiceTemplateCreator = () => {
 									</tr>
 								</thead>
 								<tbody>
-									{PLACEHOLDER_DATA.lineItems.map((item, idx) => (
+									{currentInvoiceData.lineItems.map((item, idx) => (
 										<tr
 											key={idx}
 											className={
@@ -1656,6 +2255,11 @@ const InvoiceTemplateCreator = () => {
 																{template.showBarcode && item.barcode && (
 																	<div className="invoice-sku-size">
 																		* Barcode ({item.barcode})
+																	</div>
+																)}
+																{template.showHsCode && item.hsCode && (
+																	<div className="invoice-sku-size">
+																		* HS Code ({item.hsCode})
 																	</div>
 																)}
 															</td>
@@ -1730,7 +2334,7 @@ const InvoiceTemplateCreator = () => {
 													const field = AVAILABLE_FIELDS.summary.find(
 														(f) => f.id === fieldId
 													);
-													const value = PLACEHOLDER_DATA.summary[fieldId];
+													const value = currentInvoiceData.summary[fieldId];
 													return (
 														<tr key={fieldId} className="invoice-summary-row">
 															<td className="invoice-summary-label">
@@ -1767,7 +2371,7 @@ const InvoiceTemplateCreator = () => {
 												const field = AVAILABLE_FIELDS.summary.find(
 													(f) => f.id === fieldId
 												);
-												const value = PLACEHOLDER_DATA.summary[fieldId];
+												const value = currentInvoiceData.summary[fieldId];
 												return (
 													<tr key={fieldId} className="invoice-summary-row">
 														<td className="invoice-summary-label">
@@ -1793,10 +2397,81 @@ const InvoiceTemplateCreator = () => {
 							)}
 						</div>
 
-						{/* Footer - Removed as sign & stamp is now in summary */}
-					</div>
+						{/* Footer - Custom Text and Notes Section */}
+						{(() => {
+							const orderComment = currentInvoiceData.notes?.orderComment?.trim() || "";
+							const saleNotes = currentInvoiceData.notes?.saleNotes?.trim() || "";
+							const hasOrderComment = orderComment && orderComment !== "0";
+							const hasSaleNotes = saleNotes && saleNotes !== "0";
+							const hasCustomFooter = template.footer && template.footer.length > 0 && template.footer.some(row => row.some(cell => cell.text.trim()));
+
+							return (hasCustomFooter || hasOrderComment || hasSaleNotes) ? (
+								<div className="invoice-footer-section">
+									{/* Custom Footer Text */}
+									{hasCustomFooter && template.footer.map((row, rowIndex) => (
+										<div
+											key={rowIndex}
+											className="invoice-footer-row"
+											style={{
+												display: "flex",
+												gap: "1rem",
+												marginBottom: rowIndex < template.footer.length - 1 ? "0.5rem" : "0.75rem",
+											}}>
+											{row.map((cell, cellIndex) => (
+												<div
+													key={cellIndex}
+													className="invoice-footer-cell"
+													style={{
+														flex: 1,
+														textAlign: cell.align || "left",
+														color: "#000000",
+														fontSize: `${template.fontSize}px`,
+													}}>
+													{cell.text}
+												</div>
+											))}
+										</div>
+									))}
+									{/* Notes Section */}
+									{hasOrderComment && (
+										<div className="invoice-footer-note">
+											<div className="invoice-footer-label">Order Comments:</div>
+											<div className="invoice-footer-value">
+												{orderComment}
+											</div>
+										</div>
+									)}
+									{hasSaleNotes && (
+										<div className="invoice-footer-note">
+											<div className="invoice-footer-label">Sales Notes:</div>
+											<div className="invoice-footer-value">
+												{saleNotes}
+											</div>
+										</div>
+									)}
+								</div>
+							) : null;
+						})()}
+						</div>
+					)}
 				</div>
 			</div>
+
+			{/* Template Save Dialog */}
+			<TemplateSaveDialog
+				isOpen={showSaveDialog}
+				onClose={() => setShowSaveDialog(false)}
+				onSave={handleSaveTemplate}
+				templateName={templateName}
+			/>
+
+			{/* Template Manager */}
+			<TemplateManager
+				isOpen={showTemplateManager}
+				onClose={() => setShowTemplateManager(false)}
+				onSelectTemplate={handleLoadTemplate}
+				onEditTemplate={handleLoadTemplate}
+			/>
 		</div>
 	);
 };
